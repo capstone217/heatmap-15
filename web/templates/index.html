@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wi-Fi RF Heatmap Dashboard</title>
+    <style>
+        :root {
+            --bg: #f6f8fb;
+            --card: #ffffff;
+            --line: #dfe5ec;
+            --text: #17202a;
+            --muted: #6b7684;
+            --green: #2f9e44;
+            --blue: #2563eb;
+            --orange: #f59f00;
+            --red: #dc3545;
+            --shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", system-ui, sans-serif;
+        }
+
+        .page {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 14px;
+        }
+
+        .topbar {
+            display: grid;
+            grid-template-columns: minmax(270px, 1fr) auto;
+            gap: 14px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 25px;
+            line-height: 1.1;
+            letter-spacing: 0;
+        }
+
+        .subtitle {
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .connection {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #adb5bd;
+            display: inline-block;
+            flex: 0 0 auto;
+        }
+
+        .dot.ok { background: var(--green); }
+        .dot.warn { background: var(--orange); }
+        .dot.bad { background: var(--red); }
+
+        .controlbar {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(70px, 92px)) repeat(4, auto);
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 12px;
+        }
+
+        label.field {
+            display: grid;
+            gap: 4px;
+            color: #343a40;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        input {
+            width: 100%;
+            border: 1px solid #cfd8e3;
+            border-radius: 6px;
+            background: #fff;
+            padding: 8px 9px;
+            color: var(--text);
+            font: inherit;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        button {
+            border: 1px solid #cfd8e3;
+            border-radius: 7px;
+            background: #fff;
+            color: #243447;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 900;
+            padding: 10px 15px;
+            cursor: pointer;
+            white-space: nowrap;
+            min-height: 38px;
+        }
+
+        button:hover { filter: brightness(0.98); }
+        .btn-start { background: var(--green); border-color: var(--green); color: #fff; }
+        .btn-stop { border-color: #ffb86b; color: #e67700; background: #fffaf3; }
+        .btn-danger { background: var(--red); border-color: var(--red); color: #fff; }
+        .btn-blue { border-color: #b8c7ff; color: var(--blue); background: #f8faff; }
+
+        .toast {
+            position: fixed;
+            top: 14px;
+            left: 50%;
+            z-index: 50;
+            min-width: 260px;
+            max-width: min(520px, calc(100vw - 28px));
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #badbcc;
+            background: #f0fff4;
+            color: #146c43;
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
+            font-size: 14px;
+            font-weight: 900;
+            text-align: center;
+            transform: translate(-50%, -80px);
+            opacity: 0;
+            pointer-events: none;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+
+        .toast.show {
+            transform: translate(-50%, 0);
+            opacity: 1;
+        }
+
+        .toast.error {
+            border-color: #f1aeb5;
+            background: #fff5f5;
+            color: #b02a37;
+        }
+
+        .toast.warn {
+            border-color: #ffda6a;
+            background: #fff9db;
+            color: #997404;
+        }
+
+        .row {
+            display: grid;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .row.top {
+            grid-template-columns: 1.05fr 1fr;
+            align-items: start;
+        }
+
+        .main {
+            display: grid;
+            grid-template-columns: minmax(0, 1.48fr) minmax(360px, 0.78fr);
+            gap: 10px;
+            align-items: start;
+        }
+
+        .right {
+            display: grid;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            min-width: 0;
+        }
+
+        .card.pad { padding: 12px 14px; }
+
+        .card-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-size: 15px;
+            font-weight: 900;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+        }
+
+        .status-item {
+            padding: 8px 14px;
+            border-right: 1px solid var(--line);
+            min-width: 0;
+        }
+
+        .status-item:last-child { border-right: 0; }
+
+        .status-name {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-weight: 900;
+            margin-bottom: 4px;
+            line-height: 1.15;
+        }
+
+        .status-value {
+            color: var(--green);
+            font-size: 13px;
+            font-weight: 900;
+            overflow-wrap: anywhere;
+        }
+
+        .progress-grid {
+            display: grid;
+            grid-template-columns: minmax(170px, 1fr) minmax(160px, 0.9fr) minmax(120px, 0.65fr);
+            gap: 12px;
+            align-items: center;
+        }
+
+        .metric {
+            min-width: 0;
+            padding: 4px 8px;
+        }
+
+        .metric + .metric { border-left: 1px solid var(--line); }
+
+        .metric-label {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            line-height: 1.15;
+            font-weight: 900;
+            font-family: Consolas, "SFMono-Regular", monospace;
+            overflow-wrap: anywhere;
+        }
+
+        .progress-track {
+            height: 8px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: #e9edf3;
+            margin-top: 7px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--blue);
+            border-radius: inherit;
+            transition: width 0.2s ease;
+        }
+
+        .mini-map {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 4px;
+            max-width: 300px;
+        }
+
+        .mini-waypoint {
+            min-height: 30px;
+            border: 1px solid #dfe5ec;
+            border-radius: 5px;
+            background: #f8fafc;
+            padding: 3px 5px;
+            font-size: 10px;
+            line-height: 1.1;
+            font-family: Consolas, "SFMono-Regular", monospace;
+            color: #495057;
+        }
+
+        .mini-waypoint.done {
+            min-height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3px;
+        }
+
+        .mini-waypoint.current {
+            border-color: var(--blue);
+            box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25);
+        }
+
+        .mini-symbol {
+            float: right;
+            font-weight: 900;
+            font-size: 13px;
+        }
+
+        .mini-waypoint.done .mini-symbol {
+            float: none;
+            font-size: 20px;
+        }
+
+        .mini-symbol.visited { color: var(--green); }
+        .mini-symbol.failed { color: var(--red); }
+        .mini-symbol.retry { color: var(--orange); }
+        .mini-symbol.pending { color: #adb5bd; }
+
+        .heatmap-card { padding: 12px 14px; }
+
+        .heatmap-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .heatmap-title {
+            font-size: 16px;
+            font-weight: 900;
+        }
+
+        .heatmap-tools {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 900;
+            flex-wrap: wrap;
+        }
+
+        .legend {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-bar {
+            width: 140px;
+            height: 10px;
+            border-radius: 999px;
+            background: linear-gradient(to right, #2f55d4, #20c997, #ffd43b, #e03131);
+            border: 1px solid #d8dee8;
+        }
+
+        .position-pill {
+            border: 1px solid var(--line);
+            background: #f8fafc;
+            border-radius: 999px;
+            padding: 5px 10px;
+        }
+
+        .map-wrap {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 78px;
+            gap: 12px;
+            align-items: stretch;
+        }
+
+        .canvas-box {
+            position: relative;
+            width: 100%;
+            height: 430px;
+            border: 1px solid #d8dee8;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .scale {
+            display: grid;
+            grid-template-columns: 26px 1fr;
+            gap: 7px;
+            align-items: center;
+            color: #343a40;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .scale-labels {
+            height: 300px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            text-align: right;
+        }
+
+        .scale-bar {
+            height: 300px;
+            width: 16px;
+            border: 1px solid #cfd8e3;
+            border-radius: 3px;
+            background: linear-gradient(to bottom, #e03131, #ffd43b, #20c997, #2f55d4);
+        }
+
+        .map-note {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .camera-box {
+            position: relative;
+            height: 200px;
+            background: #111;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .camera-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .camera-placeholder {
+            position: absolute;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: #f1f3f5;
+            color: var(--muted);
+            font-weight: 900;
+        }
+
+        .camera-box.offline .camera-placeholder { display: flex; }
+
+        .camera-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding-top: 8px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+            gap: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        th, td {
+            border: 1px solid #e7ebf0;
+            padding: 7px 8px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #f8fafc;
+            font-weight: 900;
+        }
+
+        tr.selected-ap td {
+            background: #fff7e6;
+            font-weight: 900;
+        }
+
+        .table-scroll {
+            overflow: auto;
+            max-height: 184px;
+        }
+
+        .two-col > .card.pad .table-scroll {
+            max-height: 420px;
+            overflow-y: auto;
+            overflow-x: auto;
+        }
+
+        .info-list {
+            display: grid;
+            gap: 7px;
+            font-size: 12px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            border-bottom: 1px solid #edf1f5;
+            padding-bottom: 6px;
+        }
+
+        .info-row span:first-child {
+            color: var(--muted);
+            font-weight: 800;
+        }
+
+        .info-row span:last-child {
+            text-align: right;
+            font-weight: 900;
+            overflow-wrap: anywhere;
+        }
+
+        .downloads {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .download-btn {
+            min-width: 0;
+            min-height: 62px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.35;
+        }
+
+        .download-btn small {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .download-btn.green {
+            color: var(--green);
+            border-color: #b9e6c4;
+            background: #f7fff8;
+        }
+
+        .download-btn.blue {
+            color: var(--blue);
+            border-color: #bdd0ff;
+            background: #f8faff;
+        }
+
+        .bottom {
+            margin-top: 10px;
+        }
+
+        .bottom-table {
+            overflow: auto;
+            max-height: 166px;
+        }
+
+        .footer-note {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .help {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 21px;
+            height: 21px;
+            border-radius: 50%;
+            background: var(--blue);
+            color: #fff;
+            font-weight: 900;
+            margin-right: 8px;
+        }
+
+        @media (max-width: 1180px) {
+            .topbar, .row.top, .main, .two-col {
+                grid-template-columns: 1fr;
+            }
+
+            .controlbar {
+                grid-template-columns: repeat(5, minmax(70px, 1fr));
+            }
+
+            .controlbar button {
+                grid-column: span 1;
+            }
+
+            .status-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .status-item {
+                border-right: 0;
+                border-bottom: 1px solid var(--line);
+            }
+        }
+
+        @media (max-width: 760px) {
+            .page { padding: 10px; }
+            .controlbar, .progress-grid, .map-wrap, .downloads {
+                grid-template-columns: 1fr;
+            }
+
+            .metric + .metric { border-left: 0; border-top: 1px solid var(--line); }
+            .canvas-box { height: 310px; }
+            .scale { display: none; }
+            .footer-note { align-items: flex-start; flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div class="page">
+    <section class="topbar">
+        <div>
+            <h1>Wi-Fi RF Heatmap Dashboard</h1>
+            <div class="subtitle">자율주행 로봇 기반 Wi-Fi 전파 측정 시스템</div>
+        </div>
+        <div class="connection">
+            <span id="ws-dot" class="dot"></span>
+            <span id="connection-text">상태 확인 중</span>
+            <button onclick="manualRefresh()">새로고침</button>
+        </div>
+    </section>
+
+    <section class="controlbar">
+        <label class="field">기준<input id="origin-label" value="0.0" readonly></label>
+        <label class="field">X Max (m)<input id="area-x" type="number" value="6.0" min="0.5" step="0.05"></label>
+        <label class="field">Y Max (m)<input id="area-y" type="number" value="10.0" min="0.5" step="0.05"></label>
+        <label class="field">셀 수<input id="cell-count" type="number" value="28" min="1" step="1"></label>
+        <label class="field">간격 (m)<input id="grid-spacing" type="number" value="1.5" min="0.1" step="0.1"></label>
+        <button class="btn-start" onclick="startExploration()">▶ 탐사 시작</button>
+        <button class="btn-stop" onclick="stopExploration()">□ 탐사 정지</button>
+        <button class="btn-danger" onclick="emergencyStop()">⏱ 비상 정지</button>
+        <button onclick="resetData()">↻ 초기화</button>
+    </section>
+
+    <section class="row top">
+        <div class="card pad">
+            <div class="card-title">시스템 상태</div>
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-name">Robot <span id="robot-dot" class="dot"></span></div>
+                    <div id="robot-status" class="status-value">확인 중</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-name">UWB <span id="uwb-dot" class="dot"></span></div>
+                    <div id="uwb-status" class="status-value">확인 중</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-name">Wi-Fi Scan <span id="wifi-dot" class="dot"></span></div>
+                    <div id="wifi-status" class="status-value">대기 중</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-name">RSSI <span id="rssi-dot" class="dot"></span></div>
+                    <div id="rssi-status" class="status-value">대기 중</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-name">Obstacle <span id="obstacle-dot" class="dot"></span></div>
+                    <div id="obstacle-status" class="status-value">확인 중</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-name">Camera <span id="camera-dot" class="dot"></span></div>
+                    <div id="camera-status" class="status-value">확인 중</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card pad">
+            <div class="card-title">측정 진행 현황</div>
+            <div class="progress-grid">
+                <div class="metric">
+                    <div class="metric-label">진행률</div>
+                    <div class="metric-value"><span id="progress-count">0</span> / <span id="progress-total">9</span> (<span id="progress-percent">0</span>%)</div>
+                    <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">방문 맵 O / X / △</div>
+                    <div id="mini-waypoint-map" class="mini-map"></div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">예상 완료 시간</div>
+                    <div id="eta" class="metric-value">약 -분</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="main">
+        <div>
+            <div class="card heatmap-card">
+                <div class="heatmap-head">
+                    <div class="heatmap-title">Wi-Fi RSSI Heatmap</div>
+                    <div class="heatmap-tools">
+                        <span class="legend">약함 (-90 dBm)<span class="legend-bar"></span>강함 (-30 dBm)</span>
+                        <span class="position-pill">현재 위치 X:<span id="pos-x">0.00</span> / Y:<span id="pos-y">0.00</span></span>
+                    </div>
+                </div>
+                <div class="map-wrap">
+                    <div class="canvas-box"><canvas id="heatmap"></canvas></div>
+                    <div class="scale">
+                        <div class="scale-labels">
+                            <span>-30</span><span>-40</span><span>-50</span><span>-60</span><span>-70</span><span>-80</span><span>-90</span>
+                        </div>
+                        <div>
+                            <div style="font-weight:900; margin-bottom:8px;">RSSI (dBm)</div>
+                            <div class="scale-bar"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="map-note">
+                    <span>● 측정 지점 / ● 현재 위치 / ─ 등고선</span>
+                    <span id="selected-ap-note">선택 AP: 대기 중</span>
+                </div>
+            </div>
+
+            <div class="card pad bottom">
+                <div class="card-title">최근 측정 데이터</div>
+                <div class="bottom-table">
+                    <table>
+                        <thead><tr><th>x (m)</th><th>y (m)</th><th>RSSI (dBm)</th><th>시간</th></tr></thead>
+                        <tbody id="recent-body"><tr><td colspan="4">측정 데이터 대기 중</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="right">
+            <div class="card pad">
+                <div class="card-title">
+                    <span>실시간 로봇 카메라</span>
+                    <span><span id="camera-title-dot" class="dot"></span> <span id="camera-title-status">확인 중</span></span>
+                </div>
+                <div id="camera-box" class="camera-box">
+                    <img id="camera-stream" alt="USB Camera" onload="cameraOnline()" onerror="cameraOffline()">
+                    <div class="camera-placeholder">카메라 피드 대기 중</div>
+                </div>
+                <div class="camera-meta">
+                    <span>USB Camera · 640x480 · 10~15 FPS</span>
+                    <button class="btn-blue" onclick="reloadCamera()">새로고침</button>
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="card pad">
+                    <div class="card-title">주변 AP 스캔 결과</div>
+                    <div class="table-scroll">
+                        <table>
+                            <thead><tr><th>SSID</th><th>BSSID</th><th>Band</th><th>RSSI (dBm)</th><th>상태</th></tr></thead>
+                            <tbody id="ap-body"><tr><td colspan="5">스캔 데이터 대기 중</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="right">
+                    <div class="card pad">
+                        <div class="card-title">선택 AP 정보</div>
+                        <div class="info-list">
+                            <div class="info-row"><span>SSID</span><span id="ap-ssid">-</span></div>
+                            <div class="info-row"><span>BSSID</span><span id="ap-bssid">-</span></div>
+                            <div class="info-row"><span>Band</span><span id="ap-band">-</span></div>
+                            <div class="info-row"><span>Channel</span><span id="ap-channel">-</span></div>
+                            <div class="info-row"><span>현재 RSSI</span><span id="ap-rssi">-</span></div>
+                        </div>
+                    </div>
+
+                    <div class="card pad">
+                        <div class="card-title">측정 데이터 요약</div>
+                        <div class="info-list">
+                            <div class="info-row"><span>측정 지점 수</span><span id="sum-count">0개</span></div>
+                            <div class="info-row"><span>남은 지점</span><span id="sum-remaining">28개</span></div>
+                            <div class="info-row"><span>전체 예정 지점</span><span id="sum-total">28개</span></div>
+                            <div class="info-row"><span>평균 RSSI</span><span id="sum-avg">-</span></div>
+                            <div class="info-row"><span>최소 RSSI</span><span id="sum-min">-</span></div>
+                            <div class="info-row"><span>최대 RSSI</span><span id="sum-max">-</span></div>
+                            <div class="info-row"><span>CSV 저장 상태</span><span id="sum-csv">대기 중</span></div>
+                            <div class="info-row"><span>최근 저장 파일</span><span id="sum-file">-</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="downloads">
+                <button class="download-btn green" onclick="downloadCsv()">CSV 다운로드<small>측정 데이터 (CSV)</small></button>
+                <button class="download-btn blue" onclick="downloadFingerprint()">Fingerprint DB 다운로드<small>핑거프린트 DB (CSV)</small></button>
+            </div>
+        </div>
+    </section>
+
+    <section class="footer-note">
+        <div><span class="help">i</span>6m x 10m 공간에서 cap1, cap2, cap3, cap4, cap5 SSID의 RSSI를 좌표별로 측정합니다.</div>
+        <div>시스템 시간: <span id="clock">-</span></div>
+    </section>
+</div>
+
+<script>
+    const RSSI_MIN = -90;
+    const RSSI_MAX = -30;
+    const DEFAULT_ROOM = { width: 6.0, height: 10.0 };
+    const DEFAULT_WAYPOINTS = [
+        [0.75, 0.75], [2.25, 0.75], [3.75, 0.75], [5.25, 0.75],
+        [0.75, 2.25], [2.25, 2.25], [3.75, 2.25], [5.25, 2.25],
+        [0.75, 3.75], [2.25, 3.75], [3.75, 3.75], [5.25, 3.75],
+        [0.75, 5.25], [2.25, 5.25], [3.75, 5.25], [5.25, 5.25],
+        [0.75, 6.75], [2.25, 6.75], [3.75, 6.75], [5.25, 6.75],
+        [0.75, 8.25], [2.25, 8.25], [3.75, 8.25], [5.25, 8.25],
+        [0.75, 9.75], [2.25, 9.75], [3.75, 9.75], [5.25, 9.75],
+    ];
+    const TARGET_SSIDS = ["cap1", "cap2", "cap3", "cap4", "cap5"];
+    const API_BASE = window.location.protocol === "file:" ? "http://localhost:8000" : `${window.location.protocol}//${window.location.host}`;
+    const WS_BASE = window.location.protocol === "file:" ? "ws://localhost:8000/ws" : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
+
+    let ws = null;
+    let lastStateAt = 0;
+    let points = [];
+    let selectedBssid = "";
+    let selectedAp = null;
+    let robot = { x: 0, y: 0 };
+    let origin = { x: 0, y: 0 };
+    let latestState = {};
+    let stickyWaypointStates = [];
+    let explorationCompleteToastShown = false;
+    let lastHeavyRenderAt = 0;
+    let lastPointsSignature = "";
+
+    function $(id) { return document.getElementById(id); }
+
+    function setDot(id, state) {
+        const dot = $(id);
+        if (!dot) return;
+        dot.className = `dot ${state || ""}`;
+    }
+
+    function setText(id, value) {
+        const el = $(id);
+        if (el) el.textContent = value;
+    }
+
+    function area() {
+        const width = Number($("area-x").value) || DEFAULT_ROOM.width;
+        const height = Number($("area-y").value) || DEFAULT_ROOM.height;
+        return { width: Math.max(0.5, width), height: Math.max(0.5, height) };
+    }
+
+    function spacing() {
+        return Math.max(0.1, Number($("grid-spacing").value) || 1.5);
+    }
+
+    function rssiColor(rssi, alpha = 0.88) {
+        const t = Math.max(0, Math.min(1, (rssi - RSSI_MIN) / (RSSI_MAX - RSSI_MIN)));
+        const hue = 225 - t * 225;
+        const lightness = 48 + t * 6;
+        return `hsla(${hue}, 94%, ${lightness}%, ${alpha})`;
+    }
+
+    function normalizePoint(raw) {
+        if (!raw) return null;
+        const x = Number(raw.x);
+        const y = Number(raw.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        const aps = Array.isArray(raw.aps)
+            ? raw.aps.map(ap => ({
+                ssid: String(ap.ssid || ""),
+                bssid: String(ap.bssid || ""),
+                rssi: Number(ap.rssi),
+                band: String(ap.band || ""),
+                channel: ap.channel ?? "",
+                frequency: ap.frequency ?? "",
+                interface: String(ap.interface || "")
+            })).filter(ap => Number.isFinite(ap.rssi))
+            : [];
+        return { x, y, aps, timestamp: raw.timestamp || Date.now() };
+    }
+
+    function allAps() {
+        const byBssid = new Map();
+        points.forEach(point => {
+            point.aps.forEach(ap => {
+                if (!ap.bssid) return;
+                const key = ap.bssid.toLowerCase();
+                const old = byBssid.get(key);
+                if (!old || ap.rssi > old.rssi) byBssid.set(key, ap);
+            });
+        });
+        return Array.from(byBssid.values()).sort((a, b) => b.rssi - a.rssi);
+    }
+
+    function targetSsidNote() {
+        return `대상 SSID: ${TARGET_SSIDS.join(", ")}`;
+    }
+
+    function selectDefaultAp() {
+        const aps = allAps();
+        if (!selectedBssid && aps.length) selectedBssid = aps[0].bssid.toLowerCase();
+        selectedAp = aps.find(ap => ap.bssid.toLowerCase() === selectedBssid) || aps[0] || null;
+        if (selectedAp) selectedBssid = selectedAp.bssid.toLowerCase();
+    }
+
+    function samplesForSelectedAp() {
+        selectDefaultAp();
+        if (!selectedAp) {
+            return points.map(point => {
+                if (!point.aps.length) return null;
+                const strongest = point.aps.reduce((best, ap) => ap.rssi > best.rssi ? ap : best, point.aps[0]);
+                return { x: point.x, y: point.y, rssi: strongest.rssi, ap: strongest, point };
+            }).filter(Boolean);
+        }
+        return points.map(point => {
+            const ap = point.aps.find(item => item.bssid.toLowerCase() === selectedBssid);
+            return ap ? { x: point.x, y: point.y, rssi: ap.rssi, ap, point } : null;
+        }).filter(Boolean);
+    }
+
+    function estimateRssi(x, y, samples) {
+        if (!samples.length) return null;
+        let weighted = 0;
+        let weightSum = 0;
+        let nearest = Infinity;
+        const radius = Math.max(area().width, area().height) * 0.85;
+        for (const sample of samples) {
+            const d = Math.hypot(x - sample.x, y - sample.y);
+            nearest = Math.min(nearest, d);
+            if (d < 0.03) return sample.rssi;
+            if (d <= radius) {
+                const w = 1 / Math.max(0.04, d * d);
+                weighted += sample.rssi * w;
+                weightSum += w;
+            }
+        }
+        if (!weightSum) return null;
+        const confidence = Math.max(0.28, 1 - nearest / radius);
+        return (weighted / weightSum) * confidence + RSSI_MIN * (1 - confidence);
+    }
+
+    function buildTransform(canvas, room) {
+        const padL = 46;
+        const padR = 18;
+        const padT = 18;
+        const padB = 36;
+        const plotW = canvas.width - padL - padR;
+        const plotH = canvas.height - padT - padB;
+        const scale = Math.min(plotW / room.width, plotH / room.height);
+        const left = padL + (plotW - room.width * scale) / 2;
+        const top = padT + (plotH - room.height * scale) / 2;
+        return {
+            scale,
+            left,
+            top,
+            right: left + room.width * scale,
+            bottom: top + room.height * scale,
+            toX: x => left + x * scale,
+            toY: y => top + (room.height - y) * scale,
+            toMx: px => (px - left) / scale,
+            toMy: py => room.height - (py - top) / scale
+        };
+    }
+
+    function drawGrid(ctx, tr, room) {
+        const step = spacing();
+        ctx.save();
+        ctx.strokeStyle = "#e5eaf0";
+        ctx.lineWidth = 1;
+        ctx.fillStyle = "#6b7684";
+        ctx.font = "11px Consolas, monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        for (let x = 0; x <= room.width + 0.0001; x += step) {
+            const px = tr.toX(x);
+            ctx.beginPath();
+            ctx.moveTo(px, tr.top);
+            ctx.lineTo(px, tr.bottom);
+            ctx.stroke();
+            ctx.fillText(x.toFixed(Number.isInteger(step) ? 0 : 1), px, tr.bottom + 8);
+        }
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        for (let y = 0; y <= room.height + 0.0001; y += step) {
+            const py = tr.toY(y);
+            ctx.beginPath();
+            ctx.moveTo(tr.left, py);
+            ctx.lineTo(tr.right, py);
+            ctx.stroke();
+            ctx.fillText(y.toFixed(Number.isInteger(step) ? 0 : 1), tr.left - 8, py);
+        }
+        ctx.strokeStyle = "#495057";
+        ctx.lineWidth = 1.6;
+        ctx.strokeRect(tr.left, tr.top, room.width * tr.scale, room.height * tr.scale);
+        ctx.fillStyle = "#17202a";
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("X (m)", (tr.left + tr.right) / 2, tr.bottom + 24);
+        ctx.save();
+        ctx.translate(tr.left - 34, (tr.top + tr.bottom) / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText("Y (m)", 0, 0);
+        ctx.restore();
+        ctx.restore();
+    }
+
+    function drawContour(ctx, grid, tr, cell) {
+        const levels = [-80, -70, -60, -50, -40];
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.lineWidth = 2.0;
+        ctx.setLineDash([6, 4]);
+        ctx.lineCap = "round";
+        for (const level of levels) {
+            ctx.strokeStyle = "rgba(33, 37, 41, 0.72)";
+            for (let y = 0; y < grid.length - 1; y++) {
+                for (let x = 0; x < grid[y].length - 1; x++) {
+                    const here = grid[y][x];
+                    const right = grid[y][x + 1];
+                    const down = grid[y + 1][x];
+                    if (here === null) continue;
+                    const px = tr.left + x * cell;
+                    const py = tr.top + y * cell;
+                    if (right !== null && (here - level) * (right - level) < 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(px + cell, py);
+                        ctx.lineTo(px + cell, py + cell);
+                        ctx.stroke();
+                    }
+                    if (down !== null && (here - level) * (down - level) < 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(px, py + cell);
+                        ctx.lineTo(px + cell, py + cell);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+        ctx.restore();
+    }
+
+    function drawHeatmap() {
+        const canvas = $("heatmap");
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        const ctx = canvas.getContext("2d");
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const view = { width: rect.width, height: rect.height };
+        const room = area();
+        const tr = buildTransform(view, room);
+        const samples = samplesForSelectedAp();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+
+        const cell = Math.max(3, Math.round(tr.scale * Math.min(spacing() * 0.18, 0.09)));
+        const cols = Math.ceil((tr.right - tr.left) / cell);
+        const rows = Math.ceil((tr.bottom - tr.top) / cell);
+        const grid = Array.from({ length: rows }, () => Array(cols).fill(null));
+
+        if (samples.length) {
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const px = tr.left + c * cell + cell / 2;
+                    const py = tr.top + r * cell + cell / 2;
+                    const mx = tr.toMx(px);
+                    const my = tr.toMy(py);
+                    if (mx < 0 || mx > room.width || my < 0 || my > room.height) continue;
+                    const rssi = estimateRssi(mx, my, samples);
+                    if (rssi === null) continue;
+                    grid[r][c] = rssi;
+                    ctx.fillStyle = rssiColor(rssi, 0.74);
+                    ctx.fillRect(tr.left + c * cell, tr.top + r * cell, cell + 0.5, cell + 0.5);
+                }
+            }
+            try {
+                drawContour(ctx, grid, tr, cell);
+            } catch (error) {
+                console.warn("contour draw failed", error);
+            }
+        }
+
+        drawGrid(ctx, tr, room);
+
+        ctx.save();
+        for (const sample of samples) {
+            const x = tr.toX(sample.x);
+            const y = tr.toY(sample.y);
+            ctx.beginPath();
+            ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffffff";
+            ctx.fill();
+            ctx.strokeStyle = rssiColor(sample.rssi, 1);
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        }
+
+        const rx = tr.toX(Math.max(0, Math.min(room.width, robot.x)));
+        const ry = tr.toY(Math.max(0, Math.min(room.height, robot.y)));
+        ctx.beginPath();
+        ctx.arc(rx, ry, 10, 0, Math.PI * 2);
+        ctx.fillStyle = "#fd7e14";
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(rx, ry, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = "#17202a";
+        ctx.fill();
+
+        ctx.strokeStyle = "#17202a";
+        ctx.lineWidth = 2;
+        const sx = tr.toX(0);
+        const sy = tr.toY(0);
+        const sx2 = tr.toX(Math.min(1, room.width));
+        ctx.beginPath();
+        ctx.moveTo(sx, sy + 22);
+        ctx.lineTo(sx2, sy + 22);
+        ctx.stroke();
+        ctx.fillStyle = "#17202a";
+        ctx.font = "11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("1 m", (sx + sx2) / 2, sy + 34);
+        ctx.restore();
+
+        if (!samples.length) {
+            ctx.save();
+            ctx.fillStyle = "#7b8794";
+            ctx.font = "bold 16px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("RSSI 데이터 대기 중", (tr.left + tr.right) / 2, (tr.top + tr.bottom) / 2);
+            ctx.restore();
+        }
+    }
+
+    function updateTablesAndSummary() {
+        selectDefaultAp();
+        const aps = allAps();
+        $("ap-body").innerHTML = aps.length ? aps.map(ap => {
+            const selected = selectedAp && ap.bssid.toLowerCase() === selectedBssid;
+            const status = selected ? "선택됨" : "관측됨";
+            return `<tr class="${selected ? "selected-ap" : ""}" onclick="chooseAp('${ap.bssid.replace(/'/g, "\\'")}')">
+                <td>${ap.ssid || "-"}</td>
+                <td>${ap.bssid || "-"}</td>
+                <td>${ap.band || "-"}</td>
+                <td style="font-weight:900; color:${ap.rssi > -65 ? "var(--green)" : "var(--blue)"};">${ap.rssi.toFixed(0)}</td>
+                <td>${status}</td>
+            </tr>`;
+        }).join("") : `<tr><td colspan="5">스캔 데이터 대기 중</td></tr>`;
+
+        const samples = samplesForSelectedAp();
+        $("recent-body").innerHTML = samples.length ? samples.slice(-6).reverse().map(sample => `
+            <tr>
+                <td>${sample.x.toFixed(2)}</td>
+                <td>${sample.y.toFixed(2)}</td>
+                <td style="font-weight:900; color:${sample.rssi > -65 ? "var(--green)" : "var(--red)"};">${sample.rssi.toFixed(0)}</td>
+                <td>${formatTime(sample.point.timestamp)}</td>
+            </tr>`).join("") : `<tr><td colspan="4">측정 데이터 대기 중</td></tr>`;
+
+        if (selectedAp) {
+            $("ap-ssid").textContent = selectedAp.ssid || "-";
+            $("ap-bssid").textContent = selectedAp.bssid || "-";
+            $("ap-band").textContent = selectedAp.band || "-";
+            $("ap-channel").textContent = selectedAp.channel || "-";
+            $("ap-rssi").textContent = `${selectedAp.rssi.toFixed(0)} dBm`;
+            $("selected-ap-note").textContent = `선택 AP: ${selectedAp.ssid || selectedAp.bssid}`;
+        } else {
+            ["ap-ssid", "ap-bssid", "ap-band", "ap-channel", "ap-rssi"].forEach(id => setText(id, "-"));
+            $("selected-ap-note").textContent = targetSsidNote();
+        }
+
+        const rssis = samples.map(s => s.rssi);
+        const avg = rssis.length ? rssis.reduce((a, b) => a + b, 0) / rssis.length : null;
+        setText("sum-count", `${points.length}개`);
+        setText("sum-avg", avg === null ? "-" : `${avg.toFixed(1)} dBm`);
+        setText("sum-min", rssis.length ? `${Math.min(...rssis).toFixed(0)} dBm` : "-");
+        setText("sum-max", rssis.length ? `${Math.max(...rssis).toFixed(0)} dBm` : "-");
+    }
+
+    function chooseAp(bssid) {
+        selectedBssid = String(bssid || "").toLowerCase();
+        updateAll();
+    }
+
+    function formatTime(value) {
+        if (!value) return "-";
+        if (typeof value === "number") return new Date(value).toLocaleTimeString("ko-KR", { hour12: false });
+        const text = String(value);
+        return text.includes(" ") ? text.split(" ").slice(-1)[0] : text;
+    }
+
+    function defaultWaypointStates() {
+        return DEFAULT_WAYPOINTS.map(([x, y]) => ({
+            x,
+            y,
+            state: "pending",
+            visited: false,
+            failed_count: 0,
+        }));
+    }
+
+    function waypointSymbol(state) {
+        const name = String(state.state || "").toLowerCase();
+        if (name === "failed") return { text: "X", className: "failed" };
+        if (name === "retry") return { text: "△", className: "retry" };
+        if (state.visited || name === "visited") return { text: "O", className: "visited" };
+        return { text: "", className: "pending" };
+    }
+
+    function mergeWaypointStates(state = latestState) {
+        const incoming = Array.isArray(state.waypoint_states) && state.waypoint_states.length
+            ? state.waypoint_states
+            : defaultWaypointStates();
+
+        if (!stickyWaypointStates.length || stickyWaypointStates.length !== incoming.length) {
+            stickyWaypointStates = incoming.map(item => ({ ...item }));
+        }
+
+        stickyWaypointStates = incoming.map((item, index) => {
+            const previous = stickyWaypointStates[index] || {};
+            const previousSymbol = waypointSymbol(previous).text;
+            const currentSymbol = waypointSymbol(item).text;
+            if (previousSymbol && !currentSymbol) {
+                return { ...item, state: previous.state, visited: previous.visited, failed_count: previous.failed_count };
+            }
+            return { ...previous, ...item };
+        });
+
+        return stickyWaypointStates;
+    }
+
+    function waypointCompletionCount(states) {
+        return states.filter(item => {
+            const symbol = waypointSymbol(item).text;
+            return symbol === "O" || symbol === "X";
+        }).length;
+    }
+
+    function updateMiniWaypointMap(state = latestState) {
+        const panel = $("mini-waypoint-map");
+        if (!panel) return;
+        const states = stickyWaypointStates.length ? stickyWaypointStates : defaultWaypointStates();
+        panel.style.gridTemplateColumns = `repeat(${Math.min(4, Math.max(1, Math.ceil(Math.sqrt(states.length))))}, minmax(0, 1fr))`;
+        const currentIndex = Number(state.current_waypoint_index || 0);
+        const ordered = states
+            .map((item, index) => ({ item, index }))
+            .sort((a, b) => {
+                const ay = Number(a.item.y);
+                const by = Number(b.item.y);
+                if (Number.isFinite(ay) && Number.isFinite(by) && Math.abs(by - ay) > 1e-6) return by - ay;
+                return Number(a.item.x) - Number(b.item.x);
+            });
+        panel.innerHTML = ordered.map(({ item, index }) => {
+            const symbol = waypointSymbol(item);
+            const x = Number.isFinite(Number(item.x)) ? Number(item.x).toFixed(1) : "-";
+            const y = Number.isFinite(Number(item.y)) ? Number(item.y).toFixed(1) : "-";
+            const current = currentIndex === index + 1 ? " current" : "";
+            if (symbol.text) {
+                return `<div class="mini-waypoint done${current}">
+                    <span class="mini-symbol ${symbol.className}">${symbol.text}</span>
+                </div>`;
+            }
+            return `<div class="mini-waypoint${current}">
+                <span>#${index + 1}</span>
+                <span>(${x},${y})</span>
+            </div>`;
+        }).join("");
+    }
+
+    function updateProgress(state = latestState) {
+        const total = Number(state.total_waypoints || DEFAULT_WAYPOINTS.length);
+        const waypointStates = mergeWaypointStates(state);
+        const done = Math.min(total, waypointCompletionCount(waypointStates));
+        const remaining = Math.max(0, total - done);
+        const pct = total ? Math.round(done / total * 100) : 0;
+        setText("progress-count", done);
+        setText("progress-total", total);
+        setText("progress-percent", pct);
+        $("progress-fill").style.width = `${Math.max(0, Math.min(100, pct))}%`;
+        setText("sum-remaining", `${remaining}개`);
+        setText("sum-total", `${total}개`);
+        setText("eta", remaining ? `약 ${Math.max(1, Math.ceil(remaining * 0.8))}분` : "완료");
+        updateMiniWaypointMap(state);
+        if (total > 0 && done >= total && pct >= 100 && !explorationCompleteToastShown) {
+            explorationCompleteToastShown = true;
+            showToast("탐사완료되었습니다.");
+        } else if (done < total) {
+            explorationCompleteToastShown = false;
+        }
+    }
+
+    function updateStatusCards(state = latestState) {
+        const running = state.status === "running";
+        const navStatus = String(state.nav_status || "").toLowerCase();
+        const rssiPower = state.rssi_power || (state.motion && state.motion.rssi_power) || {};
+        const wifiScanning = navStatus.includes("rssi") || Boolean(rssiPower.dongle_power_enabled);
+        const rssiStatus = navStatus.includes("timed rssi")
+            ? "Stop-Go 샘플링"
+            : (navStatus.includes("rssi sampling") || navStatus === "sampling" || navStatus.includes("coverage rssi"))
+                ? "구역 샘플링"
+                : "대기 중";
+        const rssiSampling = rssiStatus !== "대기 중";
+        const ultrasonic = state.ultrasonic || {};
+        const ultrasonicObstacle = Boolean(ultrasonic.obstacle);
+        const ultrasonicDistance = Number(ultrasonic.distance_cm);
+        const lidarStatus = state.lidar_status || {};
+        const lidarDistance = Number(lidarStatus.nearest_distance_cm);
+        const lidarObstacle = Boolean(lidarStatus.obstacle_detected || lidarStatus.stopped_by_obstacle);
+        const uwbReceiving = Boolean(state.uwb_receiving || state.uwb_connected || state.uwb_last_seen || (state.uwb && (state.uwb.uwb_connected || state.uwb.uwb_last_seen)));
+        const obstacleDistance = Number.isFinite(lidarDistance)
+            ? lidarDistance
+            : (Number.isFinite(ultrasonicDistance) ? ultrasonicDistance : null);
+        const obstacleStatus = lidarObstacle
+            ? `LiDAR ${Number.isFinite(lidarDistance) ? `${lidarDistance.toFixed(0)}cm` : "감지"}`
+            : ultrasonicObstacle
+                ? `초음파 ${Number.isFinite(ultrasonicDistance) ? `${ultrasonicDistance.toFixed(0)}cm` : "감지"}`
+                : obstacleDistance !== null
+                    ? `정상 ${obstacleDistance.toFixed(0)}cm`
+                    : "정상";
+        const robotStatus = state.robot_ready === false ? "확인 중" : (running ? "주행 중" : "대기 중");
+        setDot("robot-dot", running ? "ok" : "");
+        setText("robot-status", robotStatus);
+        setDot("uwb-dot", state.uwb_valid ? "ok" : (uwbReceiving ? "warn" : ""));
+        setText("uwb-status", state.uwb_valid ? "좌표 수신" : (uwbReceiving ? "통신 중" : "확인 중"));
+        setDot("wifi-dot", wifiScanning ? "ok" : "");
+        setText("wifi-status", wifiScanning ? "스캔 중" : "대기 중");
+        setDot("rssi-dot", rssiSampling ? "ok" : "");
+        setText("rssi-status", rssiStatus);
+        setDot("obstacle-dot", (lidarObstacle || ultrasonicObstacle) ? "warn" : "ok");
+        setText("obstacle-status", obstacleStatus);
+        setDot("csv-dot", "ok");
+        setText("csv-status", "대기 중");
+        setText("sum-csv", "대기 중");
+        setText("pos-x", Number(robot.x).toFixed(2));
+        setText("pos-y", Number(robot.y).toFixed(2));
+    }
+
+    function updateAll() {
+        updateStatusCards();
+        updateProgress();
+        updateTablesAndSummary();
+        drawHeatmap();
+    }
+
+    function handleState(data) {
+        if (!data || data.ready === false) return;
+        latestState = data;
+        let pointsChanged = false;
+        const x = Number(data.x ?? (data.current_position && data.current_position[0]));
+        const y = Number(data.y ?? (data.current_position && data.current_position[1]));
+        if (Number.isFinite(x)) robot.x = x;
+        if (Number.isFinite(y)) robot.y = y;
+        if (Array.isArray(data.points)) {
+            const lastPoint = data.points.length ? data.points[data.points.length - 1] : {};
+            const pointsSignature = `${data.points.length}:${lastPoint.timestamp || ""}:${lastPoint.x || ""}:${lastPoint.y || ""}`;
+            if (pointsSignature !== lastPointsSignature) {
+                points = data.points.map(normalizePoint).filter(Boolean);
+                pointsChanged = true;
+                lastPointsSignature = pointsSignature;
+            }
+        } else if (Array.isArray(data.new_points)) {
+            const incomingPoints = data.new_points.map(normalizePoint).filter(Boolean);
+            if (incomingPoints.length) {
+                points.push(...incomingPoints);
+                pointsChanged = true;
+                const lastPoint = points.length ? points[points.length - 1] : {};
+                lastPointsSignature = `${points.length}:${lastPoint.timestamp || ""}:${lastPoint.x || ""}:${lastPoint.y || ""}`;
+            }
+        }
+        lastStateAt = Date.now();
+        updateStatusCards();
+        updateProgress();
+        if (pointsChanged || Date.now() - lastHeavyRenderAt > 600) {
+            updateTablesAndSummary();
+            drawHeatmap();
+            lastHeavyRenderAt = Date.now();
+        }
+    }
+
+    function connectWs() {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+        ws = new WebSocket(WS_BASE);
+        ws.onopen = () => {
+            setDot("ws-dot", "ok");
+            setText("connection-text", "연결됨");
+        };
+        ws.onclose = () => {
+            setDot("ws-dot", "");
+            setText("connection-text", "연결 끊김");
+            setTimeout(connectWs, 1200);
+        };
+        ws.onerror = () => {
+            setDot("ws-dot", "bad");
+            setText("connection-text", "연결 오류");
+        };
+        ws.onmessage = event => {
+            try { handleState(JSON.parse(event.data)); } catch (error) { console.warn(error); }
+        };
+    }
+
+    async function pollState() {
+        if (ws && ws.readyState === WebSocket.OPEN && Date.now() - lastStateAt < 900) return;
+        try {
+            const response = await fetch(`${API_BASE}/api/state?ts=${Date.now()}`);
+            if (response.ok) handleState(await response.json());
+        } catch (error) {
+            setDot("ws-dot", "bad");
+            setText("connection-text", "상태 API 대기");
+        }
+    }
+
+    async function postJson(path, body = {}) {
+        const response = await fetch(`${API_BASE}${path}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.status === "error" || data.ok === false) {
+            throw new Error(data.message || `${response.status} ${response.statusText}`);
+        }
+        return data;
+    }
+
+    let toastTimer = null;
+    function showToast(message, type = "ok") {
+        const toast = document.getElementById("toast");
+        if (!toast) return;
+        toast.textContent = message;
+        toast.className = `toast show ${type === "error" ? "error" : type === "warn" ? "warn" : ""}`;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+            toast.classList.remove("show");
+        }, 2600);
+    }
+
+    async function startExploration() {
+        try {
+            explorationCompleteToastShown = false;
+            await postJson("/api/start_auto", { width: area().width, height: area().height });
+            showToast("탐사 시작");
+        } catch (error) {
+            showToast(`탐사 시작 실패: ${error.message}`, "error");
+        }
+    }
+
+    async function stopExploration() {
+        try {
+            const data = await postJson("/api/stop_auto");
+            showToast(data.message || "탐사를 정지했습니다.");
+        } catch (error) {
+            showToast(`탐사 정지 실패: ${error.message}`, "error");
+        }
+    }
+
+    async function emergencyStop() {
+        try {
+            const data = await postJson("/api/emergency_stop");
+            showToast(data.message || "비상 정지했습니다.", data.status === "warning" ? "warn" : "ok");
+        } catch (error) {
+            showToast(`비상 정지 실패: ${error.message}`, "error");
+        }
+    }
+
+    async function resetData() {
+        if (!confirm("측정 데이터와 RF DB를 초기화할까요?")) return;
+        try {
+            const data = await postJson("/api/reset_data");
+            points = [];
+            selectedBssid = "";
+            selectedAp = null;
+            stickyWaypointStates = [];
+            explorationCompleteToastShown = false;
+            updateAll();
+            await fetchCsvFiles();
+            showToast(data.message || "초기화되었습니다.");
+        } catch (error) {
+            showToast(`초기화 실패: ${error.message}`, "error");
+        }
+    }
+
+    async function setOrigin() {
+        try {
+            await postJson("/api/calibrate_origin");
+            origin = { x: robot.x, y: robot.y };
+            $("origin-label").value = `${origin.x.toFixed(1)}, ${origin.y.toFixed(1)}`;
+            updateAll();
+        } catch (error) {
+            alert(`기준점 설정 실패: ${error.message}`);
+        }
+    }
+
+    async function downloadFile(path, fallback) {
+        const response = await fetch(`${API_BASE}${path}`);
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+            const data = await response.json();
+            if (data.status === "error" || data.ok === false) {
+                throw new Error(data.message || "다운로드할 데이터가 없습니다.");
+            }
+            throw new Error(data.message || "CSV 파일 응답이 아닙니다.");
+        }
+        const blob = await response.blob();
+        const disposition = response.headers.get("content-disposition") || "";
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        const name = match ? match[1] : fallback;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setText("sum-csv", "저장 완료");
+        setText("csv-status", "저장 중");
+        await fetchCsvFiles();
+    }
+
+    async function downloadCsv() {
+        try { await downloadFile("/api/export_csv", "measurements.csv"); }
+        catch (error) { alert(`CSV 다운로드 실패: ${error.message}`); }
+    }
+
+    async function downloadFingerprint() {
+        try { await downloadFile("/api/rf_db/export_fingerprints_csv", "rf_fingerprints.csv"); }
+        catch (error) { alert(`Fingerprint DB 다운로드 실패: ${error.message}`); }
+    }
+
+    async function fetchCsvFiles() {
+        try {
+            const response = await fetch(`${API_BASE}/api/csv_files?ts=${Date.now()}`);
+            if (!response.ok) return;
+            const data = await response.json();
+            const files = Array.isArray(data.files) ? data.files : [];
+            setText("sum-file", files.length ? files[files.length - 1] : "-");
+        } catch (error) {
+            console.warn(error);
+        }
+    }
+
+    function cameraOnline() {
+        $("camera-box").classList.remove("offline");
+        setDot("camera-dot", "ok");
+        setDot("camera-title-dot", "ok");
+        setText("camera-status", "연결됨");
+        setText("camera-title-status", "연결됨");
+    }
+
+    function cameraOffline() {
+        $("camera-box").classList.add("offline");
+        setDot("camera-dot", "");
+        setDot("camera-title-dot", "");
+        setText("camera-status", "확인 중");
+        setText("camera-title-status", "대기 중");
+    }
+
+    function reloadCamera() {
+        const img = $("camera-stream");
+        img.src = `${API_BASE}/api/video_feed?ts=${Date.now()}`;
+    }
+
+    function manualRefresh() {
+        pollState();
+        reloadCamera();
+        fetchCsvFiles();
+        updateAll();
+    }
+
+    function updateClock() {
+        $("clock").textContent = new Date().toLocaleString("ko-KR", { hour12: false });
+    }
+
+    ["area-x", "area-y", "grid-spacing", "cell-count"].forEach(id => {
+        window.addEventListener("load", () => $(id).addEventListener("input", updateAll));
+    });
+
+    window.addEventListener("resize", drawHeatmap);
+    window.addEventListener("load", () => {
+        connectWs();
+        reloadCamera();
+        pollState();
+        fetchCsvFiles();
+        updateClock();
+        updateAll();
+        setInterval(pollState, 350);
+        setInterval(updateClock, 1000);
+        setInterval(fetchCsvFiles, 5000);
+    });
+</script>
+</body>
+</html>
