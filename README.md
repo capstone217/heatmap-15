@@ -11,7 +11,7 @@ This project runs a Picar-X based autonomous radio heatmap mapper with:
 ## Run
 
 ```bash
-cd autonomous_heatmap_project
+cd heatmap-15
 sudo python3 1.py
 ```
 
